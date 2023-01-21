@@ -189,17 +189,7 @@ x_grid <- seq(min(prostate_train$lpsa),
 
 lin_pred_l1 <- predict_lin(x=x_grid, beta=lin_beta_l1$par)
 lin_pred_l2 <- predict_lin(x=x_grid, beta=lin_beta_l2$par)
-## plot data
-plot_psa_data()
-
-## plot predictions
-lines(x=x_grid, y=lin_pred_l1, col='darkgreen', lwd=2)
-lines(x=x_grid, y=lin_pred_l2, col='red', lwd=2)
-legend(4, 0, legend=c("L1 loss", "L2 loss"),
-       col=c('darkgreen','red'), lty=1:2, cex=0.8)
 ```
-
-![](Homework2_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 ## 4,Create a figure that shows lpsa (x-axis) versus lcavol (y-axis). Add and label (using the ‘legend’ function) the nonlinear model predictors associated with L2 loss, L1 loss, and tilted absolute value loss for tau = 0.25 and 0.75.
 
