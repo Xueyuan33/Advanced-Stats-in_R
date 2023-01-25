@@ -260,6 +260,30 @@ equation of x, so the decision boundary will not be a straight line, but
 a smoothing line which can more fit the model. So the variance will be
 higher than before.
 
+– what did we do that cause the model to be more flexible?
+
+We add two squared terms for x1 and x2 to the linear model.If we compare
+the errors for the training data using sum of squared errors, Without
+squared terms will have a higher error on the training data. With
+squared terms has very little as the line(model) fits too closes to the
+training data. That will makt the model more flexible.
+
+– what is bias?
+
+Bias can be defined as the difference between the Predicted values and
+the Expected values.
+
+– what is variance?
+
+Variance error is as a result of the model making too complex
+assumptions.
+
+– how about the tradeoff?
+
+After we add two squared terms for x1 and x2, the variance is higher but
+the bias is lower. It represents the model just well enough without
+having too much variance or bias for both the training and testing data.
+
 ------------------------------------------------------------------------
 
 ### knn classifier
@@ -312,6 +336,9 @@ sapply(knn_cont, lines)
     ## NULL
     ## 
     ## [[6]]
+    ## NULL
+    ## 
+    ## [[7]]
     ## NULL
 
 ``` r
