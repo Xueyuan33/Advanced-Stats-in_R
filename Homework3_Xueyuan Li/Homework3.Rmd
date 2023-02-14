@@ -131,7 +131,7 @@ error(yz_test, fit)
 form  <- lcavol ~  lweight + age + lbph + lcp + pgg45 + lpsa + svi + gleason
 x_inp <- model.matrix(form, data=prostate_train)
 y_out <- prostate_train$lcavol
-ridge_model <- glmnet(x=x_inp, y=y_out, lambda=seq(0.5, 0, -0.05))
+ridge_model <- glmnet(x=x_inp, y=y_out, lambda=seq(0.5, 0, -0.05), alpha = 0)
 print(ridge_model$beta)
 
 
