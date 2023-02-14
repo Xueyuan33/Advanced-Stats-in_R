@@ -1,0 +1,209 @@
+---
+title: "Homework03_mml"
+author: "Xueyuan Li"
+date: "2023-02-08"
+output: github_document
+---
+
+```{r}
+library('splines')        ## for 'bs'
+library('scatterplot3d')  ## for 'scatterplot3d'
+library('manipulate')     ## for 'manipulate'
+library('beeswarm')
+library('dplyr')          ## for 'select', 'filter', and others
+library('magrittr')       ## for '%<>%' operator
+library('glmnet')         ## for 'glmnet'
+library(tidyverse)
+```
+
+
+
+Using the RMarkdown/knitr/github mechanism, implement the following tasks:
+
+### (1) Use the prostate cancer data.
+
+```{r}
+prostate <- 
+  read.table(url(
+    'https://web.stanford.edu/~hastie/ElemStatLearn/datasets/prostate.data'))
+
+pairs(prostate)
+
+```
+
+### (2) Use the cor function to reproduce the correlations listed in HTF Table 3.1, page 50.
+
+```{r}
+y <- select(prostate, lcavol,lweight,age,lbph,svi, lcp, gleason)
+x<- select (prostate, lweight, age, lbph, svi, lcp, gleason, pgg45)
+table<-round(cor(x,y, method = "kendall", use = "all.obs"),digits=3)
+table[1,2:7]<-""
+table[2,3:7]<-""
+table[3,4:7]<-""
+table[4,5:7]<-""
+table[5,6:7]<-""
+table[6,7:7]<-""
+df<-data.frame(table)
+df
+
+```
+
+
+
+### (3) Treat lcavol as the outcome, and use all other variables in the data set as predictors.
+
+```{r}
+## split prostate into testing and training subsets
+prostate_train <- prostate %>%
+  filter(train == TRUE) %>% 
+  select(-train)
+
+prostate_test <- prostate %>%
+  filter(train == FALSE) %>% 
+  select(-train)
+
+x_train <- prostate_train %>%
+  select(-lcavol)
+
+x_test  <- prostate_test %>%
+  select(-lcavol)
+
+
+## principal components analysis
+pca_x_train <- princomp(x_train, cor = T)
+
+# pca loadings -- define linear combinations of X needed to calcluate each Z
+pca_x_train$loadings
+
+# transform X into Z (principal components)   -> y (prediction)
+# each row/observation has 8 predictors, X, which are transformed (matrix multiplied) by the loading factors
+z_train <- pca_x_train$scores # dim(X) = dim(Z) = 67 x 8
+```
+
+```{r}
+## predict lcavol using all PCs
+yz_train <- data.frame(lcavol=prostate_train$lcavol, # outcome
+                       z_train) # PCs from training set
+yz_test  <- data.frame(lcavol=prostate_test$lcavol, # outcome
+                       predict(pca_x_train, x_test)) # get PCs on testing set by using the same rotation as on the training set
+fit <- lm(lcavol ~ ., data=yz_train) # regress outcome on PCs using training data to estimate coefficients for each PC
+summary(fit) # components 1,2,8 have relatively large positive associations, component 7 has a negative association
+
+
+```
+
+
+### (4) With the training subset of the prostate data, train a least-squares regression model with all predictors using the lm function.
+
+```{r}
+pcr_fits <- lapply(8:0, function(nPC)
+  lm(lcavol ~ ., data=yz_train %>% select(c(1+0:nPC))))
+```
+
+### (5) Use the testing subset to compute the test error (average squared-error loss) using the fitted least-squares regression model.
+
+```{r}
+## functions to compute testing/training error w/lm
+L2_loss <- function(y, yhat)
+  (y-yhat)^2
+
+## functions to compute testing/training error with lm
+error <- function(dat, fit, loss=L2_loss) {
+  y_hat <- predict(fit, newdata=dat)
+  mean(loss(dat$lcavol, y_hat))
+}
+
+## train_error 
+error(yz_train, fit)
+
+## testing error 
+error(yz_test, fit)
+```
+
+
+### (6) Train a ridge regression model using the glmnet function, and tune the value of lambda (i.e., use guess and check to find the value of lambda that approximately minimizes the test error).
+
+```{r}
+## use lasso in combination with linear splines for 
+## lweight, age, lpbh, lcp, pgg45, and lpsa
+## use linear splines with 2 knots
+
+form  <- lcavol ~  lweight + age + lbph + lcp + pgg45 + lpsa + svi + gleason
+x_inp <- model.matrix(form, data=prostate_train)
+y_out <- prostate_train$lcavol
+ridge_model <- glmnet(x=x_inp, y=y_out, lambda=seq(0.5, 0, -0.05))
+print(ridge_model$beta)
+
+
+
+#ridge_model <- glmnet(x = as.matrix(train[, -10]), y = train$lpsa, alpha = 0)
+#cv <- cv.glmnet(x=x_inp, y=y_out, lambda=seq(0.5, 0, -0.05))
+#lambda_min <- cv$lambda.min
+
+
+
+```
+
+### (7) Create a figure that shows the training and test error associated with ridge regression as a function of lambda
+
+```{r}
+## functions to compute testing/training error with glmnet
+error <- function(dat, ridge_model, lam, form, loss=L2_loss) {
+  x_inp <- model.matrix(form, data=dat)
+  y_out <- dat$lcavol
+  y_hat <- predict(ridge_model, newx=x_inp, s=lam)  ## see predict.elnet
+  mean(loss(y_out, y_hat))
+}
+
+## compute training and testing errors as function of lambda
+err_train_1 <- sapply(ridge_model$lambda, function(lam) 
+  error(prostate_train, ridge_model, lam, form))
+err_test_1 <- sapply(ridge_model$lambda, function(lam) 
+  error(prostate_test, ridge_model, lam, form))
+
+## plot test/train error
+plot(x=range(ridge_model$lambda),
+     y=range(c(err_train_1, err_test_1)),
+     xlim=rev(range(ridge_model$lambda)),
+     type='n',
+     xlab=expression(lambda),
+     ylab='train/test error')
+points(ridge_model$lambda, err_train_1, pch=19, type='b', col='darkblue')
+points(ridge_model$lambda, err_test_1, pch=19, type='b', col='darkred')
+legend('topright', c('train','test'), lty=1, pch=19,
+       col=c('darkblue','darkred'), bty='n')
+
+colnames(ridge_model$beta) <- paste('lam =', ridge_model$lambda)
+print(ridge_model$beta %>% as.matrix)
+
+
+```
+
+### (8) Create a path diagram of the ridge regression analysis, similar to HTF Figure 3.8
+
+```{r}
+## plot path diagram
+plot(x=range(ridge_model$lambda),
+     y=range(as.matrix(ridge_model$beta)),
+     type='n',
+     xlab=expression(lambda),
+     ylab='Coefficients')
+for(i in 1:nrow(ridge_model$beta)) {
+  points(x=ridge_model$lambda, y=ridge_model$beta[i,], pch=19, col='blue')
+  lines(x=ridge_model$lambda, y=ridge_model$beta[i,], col='blue')
+}
+abline(h=0, lty=3, lwd=2)
+text(x=0, y=ridge_model$beta[,ncol(ridge_model$beta)], 
+     labels=rownames(ridge_model$beta),
+     xpd=NA, pos=4, srt=45)
+abline(h=0, lty=3, lwd=2)
+
+```
+
+
+
+
+
+
+
+
