@@ -276,16 +276,6 @@ cverrs_sd   <- apply(cverrs, 2, sd)
 cverrs_mean
 cverrs_sd 
 
-## Plot the results of 5-fold CV for kNN = 1:20
-plot(x=1:20, y=cverrs_mean, 
-     ylim=range(cverrs),
-     xlab="'k' in kNN", ylab="CV Estimate of Test Error")
-segments(x0=1:20, x1=1:20,
-         y0=cverrs_mean-cverrs_sd,
-         y1=cverrs_mean+cverrs_sd,ylim=range(cverrs))
-best_idx <- which.min(cverrs_mean)
-points(x=best_idx, y=cverrs_mean[best_idx], pch=20)
-abline(h=cverrs_mean[best_idx] + cverrs_sd[best_idx], lty=3)
 
 
 ```

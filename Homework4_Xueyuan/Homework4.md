@@ -458,21 +458,6 @@ cverrs_sd
     ##  [9] 168.5319 175.8767 165.8335 158.5756 169.1695 177.0681 209.4268 200.8906
     ## [17] 195.4782 207.5741 196.9763 213.5736
 
-``` r
-## Plot the results of 5-fold CV for kNN = 1:20
-plot(x=1:20, y=cverrs_mean, 
-     ylim=range(cverrs),
-     xlab="'k' in kNN", ylab="CV Estimate of Test Error")
-segments(x0=1:20, x1=1:20,
-         y0=cverrs_mean-cverrs_sd,
-         y1=cverrs_mean+cverrs_sd,ylim=range(cverrs))
-best_idx <- which.min(cverrs_mean)
-points(x=best_idx, y=cverrs_mean[best_idx], pch=20)
-abline(h=cverrs_mean[best_idx] + cverrs_sd[best_idx], lty=3)
-```
-
-![](Homework4_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
-
 ### 5, Plot the CV-estimated test error (average of the five estimates from each fold) as a function of the tuning parameter. Add vertical line segments to the figure (using the segments function in R) that represent one “standard error” of the CV-estimated test error (standard deviation of the five estimates from each fold).
 
 ``` r
