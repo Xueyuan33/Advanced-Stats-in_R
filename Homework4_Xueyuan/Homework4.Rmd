@@ -1,0 +1,320 @@
+---
+title: "homework4"
+author: "Xueyuan Li"
+date: "2023-02-22"
+output: github_document
+---
+
+```{r}
+library('MASS') ## for 'mcycle'
+library('manipulate') ## for 'manipulate'
+library('caret') ## 'knnreg' and 'createFolds'
+library('ggplot2')
+```
+
+Goal: Understand and implement various ways to approximate test error.
+In the ISLR book, read section 6.1.3 “Choosing the Optimal Model” and section 5.1 “Cross-Validation”. Extend and convert the attached effective-df-aic-bic-mcycle.R R script into an R markdown file that accomplishes the following tasks.
+
+### 1,Randomly split the mcycle data into training (75%) and validation (25%) subsets.
+
+```{r}
+require(caTools)
+set.seed(101) 
+sample_y = sample.split(mcycle$accel, SplitRatio = .75)
+train_y = subset(mcycle$accel, sample_y == TRUE)
+val_y  = subset(mcycle$accel, sample_y == FALSE)
+
+```
+
+```{r}
+sample_x = sample.split(mcycle$times, SplitRatio = .75)
+train_x = subset(mcycle$times, sample_x == TRUE)
+val_x  = subset(mcycle$times, sample_x == FALSE)
+
+train_x=matrix(train_x) 
+train_y=matrix(train_y)
+val_x=matrix(val_x)
+val_y=matrix(val_y)
+
+```
+
+
+### 2, Using the mcycle data, consider predicting the mean acceleration as a function of time. Use the Nadaraya-Watson method with the k-NN kernel function to create a series of prediction models by varying the tuning parameter over a sequence of values. (hint: the script already implements this)
+
+
+
+```{r}
+
+## Epanechnikov kernel function
+## x  - n x p matrix of training inputs
+## x0 - 1 x p input where to make prediction
+## lambda - bandwidth (neighborhood size)
+kernel_epanechnikov <- function(x, x0, lambda=1) {
+  d <- function(t)
+    ifelse(t <= 1, 3/4*(1-t^2), 0)
+  z <- t(t(x) - x0)
+  d(sqrt(rowSums(z*z))/lambda)
+}
+
+## k-NN kernel function
+## x  - n x p matrix of training inputs
+## x0 - 1 x p input where to make prediction
+## k  - number of nearest neighbors
+kernel_k_nearest_neighbors <- function(x, x0, knn=1) {
+  ## compute distance betwen each x and x0
+  z <- t(t(x) - x0)
+  d <- sqrt(rowSums(z*z))
+
+  ## initialize kernel weights to zero
+  w <- rep(0, length(d))
+  
+  ## set weight to 1 for k nearest neighbors
+  w[order(d)[1:knn]] <- 1
+  
+  return(w)
+}
+
+## Make predictions using the NW method
+## y  - n x 1 vector of training outputs
+## x  - n x p matrix of training inputs
+## x0 - m x p matrix where to make predictions
+## kern  - kernel function to use
+## ... - arguments to pass to kernel function
+nadaraya_watson <- function(y, x, x0, kern, ...) {
+  k <- t(apply(x0, 1, function(x0_) {
+    k_<- kern(x, x0_, ...)
+    k_/sum(k_)
+  }))
+  yhat <- drop(k %*% y)
+  attr(yhat, 'k') <- k
+  return(yhat)
+}
+
+## Helper function to view kernel (smoother) matrix
+matrix_image <- function(x) {
+  rot <- function(x) t(apply(x, 2, rev))
+  cls <- rev(gray.colors(20, end=1))
+  image(rot(x), col=cls, axes=FALSE)
+  xlb <- pretty(1:ncol(x))
+  xat <- (xlb-0.5)/ncol(x)
+  ylb <- pretty(1:nrow(x))
+  yat <- (ylb-0.5)/nrow(x)
+  axis(3, at=xat, labels=xlb)
+  axis(2, at=yat, labels=ylb)
+  mtext('Rows', 2, 3)
+  mtext('Columns', 3, 3)
+}
+
+## Compute effective df using NW method
+## y  - n x 1 vector of training outputs
+## x  - n x p matrix of training inputs
+## kern  - kernel function to use
+## ... - arguments to pass to kernel function
+effective_df <- function(y, x, kern, ...) {
+  y_hat <- nadaraya_watson(y, x, x,
+    kern=kern, ...)
+  sum(diag(attr(y_hat, 'k')))
+}
+
+## loss function
+## y    - train/test y
+## yhat - predictions at train/test x
+loss_squared_error <- function(y, yhat)
+  (y - yhat)^2
+
+## test/train error
+## y    - train/test y
+## yhat - predictions at train/test x
+## loss - loss function
+error <- function(y, yhat, loss=loss_squared_error)
+  mean(loss(y, yhat))
+
+## AIC
+## y    - training y
+## yhat - predictions at training x
+## d    - effective degrees of freedom
+aic <- function(y, yhat, d)
+  error(y, yhat) + 2/length(y)*d
+
+## BIC
+## y    - training y
+## yhat - predictions at training x
+## d    - effective degrees of freedom
+bic <- function(y, yhat, d)
+  error(y, yhat) + log(length(y))/length(y)*d
+
+
+## make predictions using NW method at training inputs
+y_hat <- nadaraya_watson(train_y, train_x, train_x,
+  kernel_epanechnikov, lambda=5)
+
+## view kernel (smoother) matrix
+matrix_image(attr(y_hat, 'k'))
+
+## compute effective degrees of freedom
+edf <- effective_df(train_y, train_x, kernel_epanechnikov, lambda=5)
+edf 
+```
+
+```{r}
+
+
+plot(train_x,train_y, xlab="Time (ms)", ylab="Acceleration (g)")
+lines(train_x, y_hat, col="#882255", lwd=2) 
+
+
+AIC<-aic(train_y,y_hat,edf)
+BIC<-bic(train_y,y_hat,edf)
+
+AIC
+BIC
+
+```
+
+
+
+
+
+
+### 3, With the squared-error loss function, compute and plot the training error, AIC, BIC, and validation error (using the validation data) as functions of the tuning parameter.
+```{r}
+
+# Create a sequence of tuning parameters
+k <- seq(1, 20, by = 1)
+length(k)
+train_error<-matrix(0, nrow = length(k), ncol = 1)
+val_error<- matrix(0, nrow = length(k), ncol = 1)
+AIC <- matrix(0, nrow = length(k), ncol = 1)
+BIC<- matrix(0, nrow = length(k), ncol = 1)
+train=data.frame(train_x,train_y)
+val=data.frame(val_x, val_y)
+
+
+for (i in 1:20) {
+  i
+  y_hat_train <-nadaraya_watson(train_y, train_x, train_x, kernel_k_nearest_neighbors,knn=i)
+  y_hat_val <- nadaraya_watson(val_y, val_x, val_x, kernel_k_nearest_neighbors, knn=i)
+
+  # Calculate the training error
+  train_error[i] <- error(train_y, y_hat_train ,loss=loss_squared_error)
+  
+  # Calculate the validation error
+  val_error[i] <- error(val_y, y_hat_val, loss=loss_squared_error)
+  
+  
+  #d <- effective_df(train_y,train_x, tuning_seq[i])
+  #train_edf <- effective_df(train_y,train_x, kernel_epanechnikov, lambda=5)
+  AIC[i] <- aic(train_y, y_hat_train , edf)
+  BIC[i] <- bic(train_y, y_hat_train , edf)
+
+}
+
+
+train_error
+val_error
+AIC
+BIC
+
+# Plot the errors as a function of the tuning parameter
+par(mfrow = c(2, 2))
+plot(k, train_error, type = "l", xlab = "Tuning Parameter", ylab = "Training Error")
+#abline(v = tuning_seq[which.min(train_error)], lty = 2)
+plot(k, AIC, type = "l", xlab = "Tuning Parameter", ylab = "AIC")
+#abline(v = tuning_seq[which.min(AIC)], lty = 2)
+plot(k, BIC, type = "l", xlab = "Tuning Parameter", ylab = "BIC")
+#abline(v = tuning_seq[which.min(BIC)], lty = 2)
+plot(k,val_error, type = "l", xlab = "Tuning Parameter", ylab = "Validation Error")
+#abline(v = tuning_seq[which.min(val_error)], lty = 2)
+
+
+```
+
+
+
+
+### 4, For each value of the tuning parameter, Perform 5-fold cross-validation using the combined training and validation data. This results in 5 estimates of test error per tuning parameter value.
+```{r}
+## 5-fold cross-validation of knnreg model
+## create five folds
+set.seed(1985)
+inc_flds  <- createFolds(mcycle$accel, k=5)
+print(inc_flds)
+sapply(inc_flds, length)  ## not all the same length
+
+cvknnreg <- function(kNN = 10, flds=inc_flds) {
+  cverr <- rep(NA, length(flds))
+  for(tst_idx in 1:length(flds)) { ## for each fold
+    
+    ## get training and testing data
+    #train=data.frame(train_x,train_y)
+    #val=data.frame(val_x, val_y)
+    #inc_trn <- train
+    #inc_tst <- val
+    
+    ## get training and testing data
+    inc_trn <- mcycle[-flds[[tst_idx]],]
+    inc_tst <- mcycle[ flds[[tst_idx]],]
+    
+    ## fit kNN model to training data
+    knn_fit <- knnreg(accel ~ times, k=kNN, data=inc_trn)
+    
+    ## compute test error on testing data
+    pre_tst <- predict(knn_fit, inc_tst)
+    
+    cverr[tst_idx] <- mean((inc_tst$accel - pre_tst)^2)
+    
+  }
+  
+  return(cverr)
+}
+
+cverrs <- sapply(1:20, cvknnreg)
+print(cverrs) 
+cverrs_mean <- apply(cverrs, 2, mean)
+cverrs_sd   <- apply(cverrs, 2, sd)
+
+cverrs_mean
+cverrs_sd 
+
+## Plot the results of 5-fold CV for kNN = 1:20
+plot(x=1:20, y=cverrs_mean, 
+     ylim=range(cverrs),
+     xlab="'k' in kNN", ylab="CV Estimate of Test Error")
+segments(x0=1:20, x1=1:20,
+         y0=cverrs_mean-cverrs_sd,
+         y1=cverrs_mean+cverrs_sd,ylim=range(cverrs))
+best_idx <- which.min(cverrs_mean)
+points(x=best_idx, y=cverrs_mean[best_idx], pch=20)
+abline(h=cverrs_mean[best_idx] + cverrs_sd[best_idx], lty=3)
+
+
+```
+
+
+
+### 5, Plot the CV-estimated test error (average of the five estimates from each fold) as a function of the tuning parameter. Add vertical line segments to the figure (using the segments function in R) that represent one “standard error” of the CV-estimated test error (standard deviation of the five estimates from each fold).
+```{r}
+## Plot the results of 5-fold CV for kNN = 1:20
+plot(x=1:20, y=cverrs_mean, 
+     ylim=range(cverrs),
+     xlab="'k' in kNN", ylab="CV Estimate of Test Error")
+segments(x0=1:20, x1=1:20,
+         y0=cverrs_mean-cverrs_sd,
+         y1=cverrs_mean+cverrs_sd,ylim=range(cverrs))
+best_idx <- which.min(cverrs_mean)
+points(x=best_idx, y=cverrs_mean[best_idx], pch=20)
+abline(h=cverrs_mean[best_idx] + cverrs_sd[best_idx], lty=3)
+```
+
+
+### 6, Interpret the resulting figures and select a suitable value for the tuning parameter.
+
+The resulting figure shows the CV-estimated test error as a function of the tuning parameter for the k-nearest neighbor regression model. The y-axis represents the mean CV-estimated test error, and the x-axis represents the values of the tuning parameter (k).
+
+The figure also includes vertical line segments that represent one standard error of the CV-estimated test error. These segments give an indication of the variability of the CV-estimated test error across the different folds.
+
+To select a suitable value for the tuning parameter, we look for the value of k=14 that has the lowest CV-estimated test error. In the figure, this corresponds to the point with the lowest y-value. Additionally, we want to choose a value of k that is not too high, as this could result in overfitting, nor too low, as this could result in underfitting.
+
+
+To select a suitable value for the tuning parameter, we look for the value of k that has the lowest CV-estimated test error. In the figure, this corresponds to the point with the lowest y-value. Additionally, we want to choose a value of k that is not too high, as this could result in overfitting, nor too low, as this could result in underfitting.
+
