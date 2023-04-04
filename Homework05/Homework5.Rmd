@@ -1,0 +1,59 @@
+---
+title: "Homework 05"
+author: "Xueyuan Li"
+date: "2023-03-28"
+output: github_document
+---
+
+Goal: Understand and implement a random forest classifier.
+
+Using the “vowel.train” data, develop a random forest (e.g., using the "randomForest" package) or gradient boosted classifier for the vowel data.
+
+Fit a random forest or gradient boosted model to the “vowel.train” data using all of the 11 features using the default values of the tuning parameters.
+
+Use 5-fold CV to tune the number of variables randomly sampled as candidates at each split if using random forest, or the ensemble size if using gradient boosting.
+
+With the tuned model, make predictions using the majority vote method, and compute the misclassification rate using the ‘vowel.test’ data.
+
+```{r}
+library(randomForest)
+library('magrittr') ## for '%<>%' operator
+library('gpairs')   ## pairs plot
+library('viridis')  ## viridis color palette
+library('tidyr')
+#vowel_train <- read.table("https://hastie.su.domains/ElemStatLearn/datasets/vowel.train", header=TRUE)
+#vowel_test <- read.table("https://hastie.su.domains/ElemStatLearn/datasets/vowel.test", header=TRUE)
+vowel_train <- read.table("https://hastie.su.domains/ElemStatLearn/datasets/vowel.train", header=TRUE)
+vowel_test <- read.table("https://hastie.su.domains/ElemStatLearn/datasets/vowel.test", header=TRUE)
+
+# Separate the columns into multiple columns
+vowel_train <- separate(vowel_train, col = row.names.y.x.1.x.2.x.3.x.4.x.5.x.6.x.7.x.8.x.9.x.10, into = c("row.names", "y", paste0("x.", 1:10)), sep = ",")
+vowel_train <- subset(vowel_train, select = -row.names)
+vowel_train$y <- as.factor(vowel_train$y)
+#vowel_train<- data.matrix(vowel_train)
+
+
+vowel_test <- separate(vowel_test, col = row.names.y.x.1.x.2.x.3.x.4.x.5.x.6.x.7.x.8.x.9.x.10, into = c("row.names", "y", paste0("x.", 1:10)), sep = ",")
+vowel_test$y <- as.factor(vowel_test$y)
+
+vowel_test <- subset(vowel_test, select = -row.names)
+#vowel_test <- data.matrix(vowel_test)
+
+
+set.seed(123) # for reproducibility
+rf_model <- randomForest(y ~ ., data = vowel_train,  ntree=500, mtry=2, proximity=TRUE, plot=TRUE, importance = TRUE)
+
+rf_preds <- predict(rf_model , newdata = vowel_test, type = "class")
+
+#vowel_test <- data.frame(vowel_test)
+
+#df=data.frame(rf_pred,vowel_test)
+#df
+
+rf_misclass <- mean(rf_preds!= vowel_test$y)
+print(rf_misclass)
+
+
+```
+
+
